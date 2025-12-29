@@ -33,10 +33,10 @@ const AddProjectMember = ({ isDialogOpen, setIsDialogOpen }) => {
       await api.post(
         `/api/projects/${project.id}/addMember`,
         { email },
-        { headers: { Authorization: `Bearer ${await getToken()}` } },
-        setIsDialogOpen(false),
-        dispatch(fetchWorkspaces({ getToken }))
+        { headers: { Authorization: `Bearer ${await getToken()}` } }
       );
+      setIsDialogOpen(false);
+      dispatch(fetchWorkspaces({ getToken }));
       toast.success("added to project successfully");
     } catch (error) {
       toast.error(error.response?.data?.message || error.message);

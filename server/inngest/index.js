@@ -1,7 +1,7 @@
 import { Inngest } from "inngest";
 import prisma from "../configs/prisma.js";
 import sendEmail from "../configs/nodemailer.js";
-import { Prisma } from "@prisma/client";
+import { prisma } from "../configs/prisma.js";
 
 // Create a client to send and receive events
 export const inngest = new Inngest({ id: "project-managment" });
@@ -16,7 +16,7 @@ const syncUserCreation = inngest.createFunction(
     await prisma.user.create({
       data: {
         id: data.id,
-        email: data?.email_addresses[0]?.email_addres,
+        email: data?.email_addresses[0]?.email_address,
         name: data?.first_name + " " + data?.last_name,
         image: data?.image_url,
       },
@@ -39,7 +39,7 @@ const syncUserDeletion = inngest.createFunction(
   }
 );
 
-// inngest d] function to update user data in the database
+// inngest function to update user data in the database
 
 const syncUserUpdation = inngest.createFunction(
   { id: "update-user-from-clerk" },
@@ -145,7 +145,7 @@ const sendTaskAssignmentEmail = inngest.createFunction(
     id: "send-task-assignment-mail",
   },
   { event: "app/task.assigned" },
-  async ({ event, steo }) => {
+  async ({ event, step }) => {
     const { taskId, origin } = event.data;
     const task = await prisma.task.findUnique({
       where: { id: taskId },
@@ -187,12 +187,13 @@ const sendTaskAssignmentEmail = inngest.createFunction(
     });
 
     if (
-      new Date(task.due_date).toLocaleDateString() !== new Date().toDateString()
+      new Date(task.due_date).toLocaleDateString() !==
+      new Date().toLocaleDateString()
     ) {
       await step.sleepUntil("wait-for-the-due-date", new Date(task.due_date));
 
       await step.run("check-if-task-is-completed", async () => {
-        const task = await Prisma.task.findUnique({
+        const task = await prisma.task.findUnique({
           where: { id: taskId },
           include: { assignee: true, project: true },
         });

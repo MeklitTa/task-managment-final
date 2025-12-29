@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import { addTask } from "../features/workspaceSlice";
+import api from "../configs/api";
 
 export default function CreateTaskDialog({
   showCreateTask,
@@ -35,7 +36,7 @@ export default function CreateTaskDialog({
     setIsSubmitting(true);
     try {
       const { data } = await api.post(
-        "api/tasks",
+        "/api/tasks",
         {
           ...formData,
           workspaceId: currentWorkspace.id,
@@ -49,7 +50,7 @@ export default function CreateTaskDialog({
         description: "",
         type: "",
         status: "TODO",
-        priority: "MedIUM",
+        priority: "MEDIUM",
         assigneeId: "",
         due_date: "",
       });

@@ -31,7 +31,7 @@ export default function ProjectSettings({ project }) {
     toast.loading("saving...");
     try {
       const { data } = await api.put("/api/projects", formData, {
-        headers: { Authorization: `Bearer${await getToken()}` },
+        headers: { Authorization: `Bearer ${await getToken()}` },
       });
 
       setIsDialogOpen(false);

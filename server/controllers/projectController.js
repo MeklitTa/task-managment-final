@@ -46,7 +46,7 @@ export const createProject = async (req, res) => {
       select: { id: true },
     });
 
-    const project = await prismaproject.create({
+    const project = await prisma.project.create({
       data: {
         workspaceId,
         name,
@@ -72,7 +72,7 @@ export const createProject = async (req, res) => {
       });
       await prisma.projectMember.createMany({
         data: membersToAdd.map((memberId) => ({
-          projectID: project.id,
+          projectId: project.id,
           userId: memberId,
         })),
       });
@@ -105,13 +105,13 @@ export const UpdateProject = async (req, res) => {
   try {
     const { userId } = await req.auth();
     const {
+      id,
       workspaceId,
       description,
       name,
       status,
       start_date,
       end_date,
-
       progress,
       priority,
     } = req.body;
@@ -124,7 +124,7 @@ export const UpdateProject = async (req, res) => {
     });
 
     if (!workspace) {
-      return res.status(404).json({ message: "worlspace not found" });
+      return res.status(404).json({ message: "workspace not found" });
     }
 
     if (
@@ -163,7 +163,7 @@ export const UpdateProject = async (req, res) => {
     res.json({ project, message: "project updated successfully" });
   } catch (error) {
     console.log(error);
-    res.satus(500).json({ message: error.code || error.message });
+    res.status(500).json({ message: error.code || error.message });
   }
 };
 
@@ -180,8 +180,8 @@ export const addMember = async (req, res) => {
     const project = await prisma.project.findUnique({
       where: {
         id: projectId,
-        include: { members: { include: { user: true } } },
       },
+      include: { members: { include: { user: true } } },
     });
 
     if (!project) {
@@ -189,12 +189,12 @@ export const addMember = async (req, res) => {
     }
     if (project.team_lead !== userId) {
       return res
-        .status(404)
+        .status(403)
         .json({ message: "only project lead can add members" });
     }
-    //  check if the use is already a member
+    //  check if the user is already a member
     const existingMember = project.members.find(
-      (member) => member.email === email
+      (member) => member.user.email === email
     );
 
     if (existingMember) {
@@ -212,6 +212,6 @@ export const addMember = async (req, res) => {
     res.json({ member, message: "member added successfully" });
   } catch (error) {
     console.log(error);
-    res.satus(500).json({ message: error.code || error.message });
+    res.status(500).json({ message: error.code || error.message });
   }
 };

@@ -93,7 +93,7 @@ export const updateTask = async (req, res) => {
       where: { id: req.params.id },
       data: req.body,
     });
-    req.json({ task: updatedTask, message: "task updated successfully" });
+    res.json({ task: updatedTask, message: "task updated successfully" });
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: error.code || error.message });
@@ -104,10 +104,10 @@ export const updateTask = async (req, res) => {
 export const deleteTask = async (req, res) => {
   try {
     const { userId } = await req.auth();
-    const { tasksIds } = req.body();
+    const { taskIds } = req.body;
 
     const tasks = await prisma.task.findMany({
-      where: { id: { in: tasksIds } },
+      where: { id: { in: taskIds } },
     });
     if (tasks.length === 0) {
       return res.status(404).json({ message: "task not found" });
@@ -125,7 +125,7 @@ export const deleteTask = async (req, res) => {
         .json({ message: " you dont have admin privileges for this project" });
     }
     await prisma.task.deleteMany({ where: { id: { in: taskIds } } });
-    req.json({ message: "task deleted successfully" });
+    res.json({ message: "task deleted successfully" });
   } catch (error) {
     console.log(error);
     res.status(500).json({ message: error.code || error.message });
