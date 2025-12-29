@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import prisma from "../configs/prisma.js";
 
 // get all workspaces for user
