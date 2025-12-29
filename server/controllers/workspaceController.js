@@ -7,21 +7,21 @@ export const getUserWorkspaces = async (req, res) => {
     const workspaces = await prisma.workspace.findMany({
       where: {
         members: { some: { userId: userId } },
-        include: {
-          members: { include: { user: true } },
-          projects: {
-            include: {
-              tasks: {
-                include: {
-                  assignee: true,
-                  comments: { include: { user: true } },
-                },
+      },
+      include: {
+        members: { include: { user: true } },
+        projects: {
+          include: {
+            tasks: {
+              include: {
+                assignee: true,
+                comments: { include: { user: true } },
               },
-              members: { include: { user: true } },
             },
+            members: { include: { user: true } },
           },
-          owner: true,
         },
+        owner: true,
       },
     });
     res.json({ workspaces });

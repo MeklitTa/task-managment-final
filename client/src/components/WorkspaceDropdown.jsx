@@ -1,16 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check, Plus } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
-import { setCurrentWorkspace } from "../features/workspaceSlice";
+import { setCurrentWorkspace, fetchWorkspaces } from "../features/workspaceSlice";
 import { useNavigate } from "react-router-dom";
-import { dummyWorkspaces } from "../assets/assets";
-import { useClerk, useOrganizationList } from "@clerk/clerk-react";
+import { useClerk, useOrganizationList, useAuth } from "@clerk/clerk-react";
 
 function WorkspaceDropdown() {
-  const { setActive, userMemberships, isLoaded } = useOrganizationList({
+  const { setActive, isLoaded } = useOrganizationList({
     userMemberships: true,
   });
   const { openCreateOrganization } = useClerk();
+  const { getToken } = useAuth();
 
   const { workspaces } = useSelector((state) => state.workspace);
   const currentWorkspace = useSelector(
@@ -22,9 +22,11 @@ function WorkspaceDropdown() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const onSelectWorkspace = (organizationId) => {
-    setActive({ organization: organizationId });
-    dispatch(setCurrentWorkspace(organizationId));
+  const onSelectWorkspace = async (workspaceId) => {
+    // Set active organization in Clerk
+    setActive({ organization: workspaceId });
+    // Set current workspace in Redux
+    dispatch(setCurrentWorkspace(workspaceId));
     setIsOpen(false);
     navigate("/");
   };
@@ -40,11 +42,24 @@ function WorkspaceDropdown() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Sync Clerk active organization with Redux current workspace
   useEffect(() => {
     if (currentWorkspace && isLoaded) {
       setActive({ organization: currentWorkspace.id });
     }
-  }, [currentWorkspace, isLoaded]);
+  }, [currentWorkspace, isLoaded, setActive]);
+
+  // Refresh workspaces after organization creation
+  const handleCreateOrganization = () => {
+    openCreateOrganization({
+      afterCreateOrganizationUrl: window.location.href,
+    });
+    setIsOpen(false);
+    // Refresh workspaces after a delay to allow Inngest to sync
+    setTimeout(() => {
+      dispatch(fetchWorkspaces({ getToken }));
+    }, 3000);
+  };
 
   return (
     <div className="relative m-4" ref={dropdownRef}>
@@ -54,9 +69,12 @@ function WorkspaceDropdown() {
       >
         <div className="flex items-center gap-3">
           <img
-            src={currentWorkspace?.image_url}
+            src={currentWorkspace?.image_url || "/default-workspace.png"}
             alt={currentWorkspace?.name}
             className="w-8 h-8 rounded shadow"
+            onError={(e) => {
+              e.target.src = "/default-workspace.png";
+            }}
           />
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-gray-800 dark:text-white text-sm truncate">
@@ -76,39 +94,45 @@ function WorkspaceDropdown() {
             <p className="text-xs text-gray-500 dark:text-zinc-400 uppercase tracking-wider mb-2 px-2">
               Workspaces
             </p>
-            {userMemberships.data.map(({ organization }) => (
-              <div
-                key={organization.id}
-                onClick={() => onSelectWorkspace(organization.id)}
-                className="flex items-center gap-3 p-2 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-zinc-800"
-              >
-                <img
-                  src={organization.imageUrl}
-                  alt={organization.name}
-                  className="w-6 h-6 rounded"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
-                    {organization.name}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-zinc-400 truncate">
-                    {organization.membersCount || 0} members
-                  </p>
+            {workspaces.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-zinc-400 px-2 py-4 text-center">
+                No workspaces found
+              </p>
+            ) : (
+              workspaces.map((workspace) => (
+                <div
+                  key={workspace.id}
+                  onClick={() => onSelectWorkspace(workspace.id)}
+                  className="flex items-center gap-3 p-2 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-zinc-800"
+                >
+                  <img
+                    src={workspace.image_url || "/default-workspace.png"}
+                    alt={workspace.name}
+                    className="w-6 h-6 rounded"
+                    onError={(e) => {
+                      e.target.src = "/default-workspace.png";
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
+                      {workspace.name}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-zinc-400 truncate">
+                      {workspace.members?.length || 0} members
+                    </p>
+                  </div>
+                  {currentWorkspace?.id === workspace.id && (
+                    <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  )}
                 </div>
-                {currentWorkspace?.id === organization.id && (
-                  <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <hr className="border-gray-200 dark:border-zinc-700" />
 
           <div
-            onClick={() => {
-              openCreateOrganization();
-              setIsOpen(false);
-            }}
+            onClick={handleCreateOrganization}
             className="p-2 cursor-pointer rounded group hover:bg-gray-100 dark:hover:bg-zinc-800"
           >
             <p className="flex items-center text-xs gap-2 my-1 w-full text-blue-600 dark:text-blue-400 group-hover:text-blue-500 dark:group-hover:text-blue-300">

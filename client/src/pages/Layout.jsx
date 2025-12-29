@@ -10,6 +10,7 @@ import {
   SignIn,
   useAuth,
   CreateOrganization,
+  useOrganizationList,
 } from "@clerk/clerk-react";
 import { fetchWorkspaces } from "../features/workspaceSlice";
 
@@ -19,17 +20,29 @@ const Layout = () => {
   const dispatch = useDispatch();
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
+  const { setActive, organizationList } = useOrganizationList();
 
   // Initial load of theme
   useEffect(() => {
-    dispatch(loadTheme(isLoaded && user && workspaces.lenght === 0));
+    dispatch(loadTheme(isLoaded && user && workspaces.length === 0));
   }, []);
   //intial load of work space
   useEffect(() => {
-    if (isLoaded && user && workspaces.lenght === 0) {
+    if (isLoaded && user && workspaces.length === 0) {
       dispatch(fetchWorkspaces({ getToken }));
     }
   }, [user, isLoaded]);
+
+  // Refresh workspaces when organization list changes (after creation)
+  useEffect(() => {
+    if (isLoaded && user && organizationList?.length > 0) {
+      // Wait a bit for Inngest to sync the organization to database
+      const timer = setTimeout(() => {
+        dispatch(fetchWorkspaces({ getToken }));
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [organizationList?.length, isLoaded, user, getToken, dispatch]);
 
   if (!user) {
     return (
@@ -45,7 +58,7 @@ const Layout = () => {
         <Loader2Icon className="size-7 text-blue-500 animate-spin" />
       </div>
     );
-  if (user && workspaces.lenght === 0) {
+  if (user && workspaces.length === 0) {
     return (
       <div className="min-h-screen flex justify-center items-center">
         <CreateOrganization />
