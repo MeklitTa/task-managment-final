@@ -66,13 +66,19 @@ async function bootstrap() {
 
     console.log('[BOOTSTRAP] Applying Clerk middleware...');
     // Apply Clerk middleware - only if CLERK_SECRET_KEY is available
+    // Exclude /api/inngest/* from Clerk auth as it's a webhook endpoint
     if (process.env.CLERK_SECRET_KEY) {
-      app.use(
-        clerkMiddleware({
-          // Clerk will automatically use CLERK_SECRET_KEY from process.env
-        })
-      );
-      console.log('[BOOTSTRAP] Clerk middleware applied');
+      // Apply Clerk middleware conditionally - skip for Inngest webhooks
+      expressApp.use((req, res, next) => {
+        // Skip Clerk middleware for Inngest webhook endpoints
+        if (req.path && req.path.startsWith('/api/inngest')) {
+          console.log('[BOOTSTRAP] Skipping Clerk middleware for Inngest endpoint:', req.path);
+          return next();
+        }
+        // Apply Clerk middleware for all other routes
+        return clerkMiddleware({})(req, res, next);
+      });
+      console.log('[BOOTSTRAP] Clerk middleware applied (excluding /api/inngest)');
     } else {
       console.warn('[BOOTSTRAP] Skipping Clerk middleware - CLERK_SECRET_KEY not set');
     }

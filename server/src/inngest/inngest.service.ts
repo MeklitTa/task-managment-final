@@ -14,7 +14,25 @@ export class InngestService {
     private prisma: PrismaService,
     private emailService: EmailService,
   ) {
-    this.client = new Inngest({ id: 'project-managment' });
+    // Configure Inngest client with serve URL for production
+    // INNGEST_SERVE_URL should be your production URL + /api/inngest
+    // Example: https://your-app.vercel.app/api/inngest
+    // For local development, it will be auto-detected
+    const inngestConfig: any = { id: 'project-managment' };
+    
+    if (process.env.INNGEST_SERVE_URL) {
+      inngestConfig.serveUrl = process.env.INNGEST_SERVE_URL;
+      this.logger.log(`Inngest serve URL configured: ${process.env.INNGEST_SERVE_URL}`);
+    } else if (process.env.VERCEL_URL) {
+      // Auto-detect Vercel URL if INNGEST_SERVE_URL is not set
+      const protocol = process.env.VERCEL_ENV === 'production' ? 'https' : 'https';
+      inngestConfig.serveUrl = `${protocol}://${process.env.VERCEL_URL}/api/inngest`;
+      this.logger.log(`Inngest serve URL auto-configured: ${inngestConfig.serveUrl}`);
+    } else {
+      this.logger.warn('INNGEST_SERVE_URL not set - Inngest will auto-detect URL (may not work in production)');
+    }
+    
+    this.client = new Inngest(inngestConfig);
     this.registerFunctions();
   }
 

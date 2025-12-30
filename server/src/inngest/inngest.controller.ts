@@ -9,12 +9,22 @@ export class InngestController {
 
   @All('*')
   async handleInngest(@Req() req: Request, @Res() res: Response) {
-    const handler = serve({
-      client: this.inngestService.client,
-      functions: this.inngestService.getFunctions(),
-    });
+    try {
+      const handler = serve({
+        client: this.inngestService.client,
+        functions: this.inngestService.getFunctions(),
+      });
 
-    return handler(req, res);
+      // Ensure the handler is called and response is handled properly
+      await handler(req, res);
+      return res;
+    } catch (error) {
+      console.error('[INNGEST] Error handling Inngest webhook:', error);
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   }
 }
 
