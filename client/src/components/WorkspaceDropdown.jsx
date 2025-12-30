@@ -3,13 +3,12 @@ import { ChevronDown, Check, Plus } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { setCurrentWorkspace, fetchWorkspaces } from "../features/workspaceSlice";
 import { useNavigate } from "react-router-dom";
-import { useClerk, useOrganizationList, useAuth } from "@clerk/clerk-react";
+import { useOrganizationList, useAuth } from "@clerk/clerk-react";
 
 function WorkspaceDropdown() {
-  const { setActive, isLoaded } = useOrganizationList({
+  const { setActive, isLoaded, organizationList } = useOrganizationList({
     userMemberships: true,
   });
-  const { openCreateOrganization } = useClerk();
   const { getToken } = useAuth();
 
   const { workspaces } = useSelector((state) => state.workspace);
@@ -21,6 +20,19 @@ function WorkspaceDropdown() {
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  // Helper function to get workspace image - prioritize Clerk organization image if available
+  const getWorkspaceImage = (workspaceId) => {
+    if (organizationList && organizationList.length > 0) {
+      const org = organizationList.find(org => org.id === workspaceId);
+      if (org?.imageUrl) {
+        return org.imageUrl;
+      }
+    }
+    // Fallback to workspace image_url from database
+    const workspace = workspaces.find(ws => ws.id === workspaceId);
+    return workspace?.image_url || "/default-workspace.png";
+  };
 
   const onSelectWorkspace = async (workspaceId) => {
     // Set active organization in Clerk
@@ -50,15 +62,12 @@ function WorkspaceDropdown() {
   }, [currentWorkspace, isLoaded, setActive]);
 
   // Refresh workspaces after organization creation
-  const handleCreateOrganization = () => {
-    openCreateOrganization({
-      afterCreateOrganizationUrl: window.location.href,
-    });
+  const handleCreateOrganization = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     setIsOpen(false);
-    // Refresh workspaces after a delay to allow Inngest to sync
-    setTimeout(() => {
-      dispatch(fetchWorkspaces({ getToken }));
-    }, 3000);
+    // Navigate to create organization page instead of using modal
+    navigate("/create-organization");
   };
 
   return (
@@ -69,7 +78,7 @@ function WorkspaceDropdown() {
       >
         <div className="flex items-center gap-3">
           <img
-            src={currentWorkspace?.image_url || "/default-workspace.png"}
+            src={currentWorkspace ? getWorkspaceImage(currentWorkspace.id) : "/default-workspace.png"}
             alt={currentWorkspace?.name}
             className="w-8 h-8 rounded shadow"
             onError={(e) => {
@@ -106,7 +115,7 @@ function WorkspaceDropdown() {
                   className="flex items-center gap-3 p-2 cursor-pointer rounded hover:bg-gray-100 dark:hover:bg-zinc-800"
                 >
                   <img
-                    src={workspace.image_url || "/default-workspace.png"}
+                    src={getWorkspaceImage(workspace.id)}
                     alt={workspace.name}
                     className="w-6 h-6 rounded"
                     onError={(e) => {

@@ -9,8 +9,9 @@ export default function StatsGrid() {
 
     const [stats, setStats] = useState({
         totalProjects: 0,
+        totalTasks: 0,
         activeProjects: 0,
-        completedProjects: 0,
+        completedTasks: 0,
         myTasks: 0,
         overdueIssues: 0,
     });
@@ -26,9 +27,17 @@ export default function StatsGrid() {
         },
         {
             icon: CheckCircle,
-            title: "Completed Projects",
-            value: stats.completedProjects,
-            subtitle: `of ${stats.totalProjects} total`,
+            title: "Total Tasks",
+            value: stats.totalTasks,
+            subtitle: `all tasks`,
+            bgColor: "bg-indigo-500/10",
+            textColor: "text-indigo-500",
+        },
+        {
+            icon: CheckCircle,
+            title: "Completed Tasks",
+            value: stats.completedTasks,
+            subtitle: `tasks done`,
             bgColor: "bg-emerald-500/10",
             textColor: "text-emerald-500",
         },
@@ -50,35 +59,57 @@ export default function StatsGrid() {
         },
     ];
 
-    useEffect(() => {
-        if (currentWorkspace) {
-            setStats({
-                totalProjects: currentWorkspace.projects.length,
-                activeProjects: currentWorkspace.projects.filter(
-                    (p) => p.status !== "CANCELLED" && p.status !== "COMPLETED"
-                ).length,
-                completedProjects: currentWorkspace.projects
-                    .filter((p) => p.status === "COMPLETED")
-                    .reduce((acc, project) => acc + project.tasks.length, 0),
-                myTasks: currentWorkspace.projects.reduce(
-                    (acc, project) =>
-                        acc +
-                        project.tasks.filter(
-                            (t) => t.assignee?.email === currentWorkspace.owner.email
-                        ).length,
-                    0
-                ),
-                overdueIssues: currentWorkspace.projects.reduce(
-                    (acc, project) =>
-                        acc + project.tasks.filter((t) => t.due_date < new Date()).length,
-                    0
-                ),
-            });
-        }
-    }, [currentWorkspace]);
+  useEffect(() => {
+    if (currentWorkspace && currentWorkspace.projects) {
+      // Calculate all tasks from all projects
+      const allTasks = currentWorkspace.projects.flatMap((p) => p.tasks || []);
+      
+      // Calculate completed tasks (tasks with status "DONE")
+      const completedTasks = allTasks.filter((t) => t.status === "DONE").length || 0;
+      
+      // Calculate completed projects (projects with status "COMPLETED")
+      const completedProjectsCount = currentWorkspace.projects.filter(
+        (p) => p.status === "COMPLETED"
+      ).length || 0;
+      
+      // Calculate total tasks count
+      const totalTasksCount = allTasks.length || 0;
+      
+      // Get current user email from workspace owner for "My Tasks" calculation
+      const ownerEmail = currentWorkspace.owner?.email;
+      const ownerId = currentWorkspace.owner?.id;
+      
+      setStats({
+        totalProjects: currentWorkspace.projects.length || 0,
+        totalTasks: totalTasksCount, // Total number of all tasks
+        activeProjects: currentWorkspace.projects.filter(
+          (p) => p.status !== "CANCELLED" && p.status !== "COMPLETED"
+        ).length || 0,
+        completedTasks: completedTasks, // Tasks with status "DONE"
+        myTasks: allTasks.filter((t) => 
+          t.assigneeId === ownerId || 
+          t.assignee?.id === ownerId || 
+          t.assignee?.email === ownerEmail
+        ).length || 0,
+        overdueIssues: allTasks.filter((t) => 
+          t.due_date && new Date(t.due_date) < new Date() && t.status !== "DONE"
+        ).length || 0,
+      });
+    } else {
+      // Reset stats if no workspace
+      setStats({
+        totalProjects: 0,
+        totalTasks: 0,
+        activeProjects: 0,
+        completedTasks: 0,
+        myTasks: 0,
+        overdueIssues: 0,
+      });
+    }
+  }, [currentWorkspace]);
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 my-9">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 my-9">
             {statCards.map(
                 ({ icon: Icon, title, value, subtitle, bgColor, textColor }, i) => (
                     <div key={i} className="bg-white dark:bg-zinc-950 dark:bg-gradient-to-br dark:from-zinc-800/70 dark:to-zinc-900/50 border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition duration-200 rounded-md" >

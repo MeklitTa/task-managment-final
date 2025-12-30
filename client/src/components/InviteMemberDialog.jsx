@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Mail, UserPlus } from "lucide-react";
 import { useSelector } from "react-redux";
-import { useOrganization } from "@clerk/clerk-react";
+import { useOrganization, useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
+import api from "../configs/api";
 
 const InviteMemberDialog = ({ isDialogOpen, setIsDialogOpen }) => {
   const { organization } = useOrganization();
+  const { getToken } = useAuth();
   const currentWorkspace = useSelector(
     (state) => state.workspace?.currentWorkspace || null
   );
@@ -19,15 +21,41 @@ const InviteMemberDialog = ({ isDialogOpen, setIsDialogOpen }) => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await organization.inviteMember({
-        emailAddress: formData.email,
-        role: formData.role,
-      });
-      toast.success("invitation sent successfully");
+      // Map Clerk role to backend role
+      const roleMapping = {
+        "org:member": "MEMBER",
+        "org:admin": "ADMIN",
+      };
+
+      // Send invitation email through our backend
+      await api.post(
+        "/api/workspaces/invite-member",
+        {
+          email: formData.email,
+          role: roleMapping[formData.role] || "MEMBER",
+          workspaceId: currentWorkspace?.id,
+          message: `You've been invited to join ${currentWorkspace?.name}`,
+        },
+        { headers: { Authorization: `Bearer ${await getToken()}` } }
+      );
+
+      // Also invite through Clerk for organization management
+      try {
+        await organization.inviteMember({
+          emailAddress: formData.email,
+          role: formData.role,
+        });
+      } catch (clerkError) {
+        // Log but don't fail - email was already sent
+        console.warn("Clerk invitation failed (email was sent):", clerkError);
+      }
+
+      toast.success("Invitation email sent successfully");
       setIsDialogOpen(false);
+      setFormData({ email: "", role: "org:member" });
     } catch (error) {
       console.log(error);
-      toast.error(error.response?.data?.message || error.message);
+      toast.error(error.response?.data?.message || error.message || "Failed to send invitation");
     } finally {
       setIsSubmitting(false);
     }

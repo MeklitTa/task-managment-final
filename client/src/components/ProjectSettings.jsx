@@ -2,15 +2,16 @@ import { format } from "date-fns";
 import { Plus, Save } from "lucide-react";
 import { useEffect, useState } from "react";
 import AddProjectMember from "./AddProjectMember";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useAuth } from "@clerk/clerk-react";
 import toast from "react-hot-toast";
 import api from "../configs/api";
-import { fetchWorkspaces } from "../features/workspaceSlice";
+import { fetchWorkspaces, updateProject as updateProjectAction } from "../features/workspaceSlice";
 
 export default function ProjectSettings({ project }) {
   const dispatch = useDispatch();
   const { getToken } = useAuth();
+  const { currentWorkspace } = useSelector((state) => state.workspace);
 
   const [formData, setFormData] = useState({
     name: "New Website Launch",
@@ -30,14 +31,56 @@ export default function ProjectSettings({ project }) {
     setIsSubmitting(true);
     toast.loading("saving...");
     try {
-      const { data } = await api.put("/api/projects", formData, {
+      // Convert date objects to ISO 8601 format strings
+      // Only include fields allowed by UpdateProjectDto (exclude team_members and team_lead)
+      const payload = {
+        id: project.id,
+        workspaceId: project.workspaceId || currentWorkspace?.id,
+        name: formData.name,
+        description: formData.description,
+        status: formData.status,
+        priority: formData.priority,
+        progress: formData.progress,
+        // Convert Date objects or ISO strings to ISO 8601 format
+        start_date: formData.start_date
+          ? (formData.start_date instanceof Date 
+              ? formData.start_date.toISOString()
+              : typeof formData.start_date === 'string' && formData.start_date.includes('T')
+              ? formData.start_date
+              : new Date(formData.start_date + 'T00:00:00.000Z').toISOString())
+          : undefined,
+        end_date: formData.end_date
+          ? (formData.end_date instanceof Date
+              ? formData.end_date.toISOString()
+              : typeof formData.end_date === 'string' && formData.end_date.includes('T')
+              ? formData.end_date
+              : new Date(formData.end_date + 'T00:00:00.000Z').toISOString())
+          : undefined,
+      };
+      
+      const { data } = await api.put("/api/projects", payload, {
         headers: { Authorization: `Bearer ${await getToken()}` },
       });
 
+      // Update local formData and Redux state with the response immediately
+      if (data.project) {
+        // Update local form state
+        setFormData({
+          ...formData,
+          ...data.project,
+          start_date: data.project.start_date ? new Date(data.project.start_date) : null,
+          end_date: data.project.end_date ? new Date(data.project.end_date) : null,
+        });
+        
+        // Update Redux state immediately for instant UI update
+        dispatch(updateProjectAction(data.project));
+      }
+
       setIsDialogOpen(false);
+      // Also refresh workspaces to ensure everything is in sync (runs in background)
       dispatch(fetchWorkspaces({ getToken }));
       toast.dismissAll();
-      toast.success(data.message);
+      toast.success(data.message || "Project updated successfully");
     } catch (error) {
       toast.dismissAll();
       toast.error(error?.response?.data.message || error.message);
@@ -47,7 +90,28 @@ export default function ProjectSettings({ project }) {
   };
 
   useEffect(() => {
-    if (project) setFormData(project);
+    if (project) {
+      // Initialize formData with proper formatting
+      setFormData({
+        name: project.name || "",
+        description: project.description || "",
+        status: project.status || "PLANNING",
+        priority: project.priority || "MEDIUM",
+        start_date: project.start_date 
+          ? (project.start_date instanceof Date 
+              ? project.start_date 
+              : new Date(project.start_date))
+          : null,
+        end_date: project.end_date
+          ? (project.end_date instanceof Date
+              ? project.end_date
+              : new Date(project.end_date))
+          : null,
+        progress: project.progress ?? 0,
+        team_members: project.team_members || [],
+        team_lead: project.team_lead || "",
+      });
+    }
   }, [project]);
 
   const inputClasses =
@@ -132,11 +196,13 @@ export default function ProjectSettings({ project }) {
               <label className={labelClasses}>Start Date</label>
               <input
                 type="date"
-                value={format(formData.start_date, "yyyy-MM-dd")}
+                value={formData.start_date 
+                  ? format(formData.start_date instanceof Date ? formData.start_date : new Date(formData.start_date), "yyyy-MM-dd")
+                  : ""}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    start_date: new Date(e.target.value),
+                    start_date: e.target.value ? new Date(e.target.value) : null,
                   })
                 }
                 className={inputClasses}
@@ -146,11 +212,13 @@ export default function ProjectSettings({ project }) {
               <label className={labelClasses}>End Date</label>
               <input
                 type="date"
-                value={format(formData.end_date, "yyyy-MM-dd")}
+                value={formData.end_date
+                  ? format(formData.end_date instanceof Date ? formData.end_date : new Date(formData.end_date), "yyyy-MM-dd")
+                  : ""}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    end_date: new Date(e.target.value),
+                    end_date: e.target.value ? new Date(e.target.value) : null,
                   })
                 }
                 className={inputClasses}

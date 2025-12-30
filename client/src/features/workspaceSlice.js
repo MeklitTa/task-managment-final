@@ -69,6 +69,28 @@ const workspaceSlice = createSlice({
           : w
       );
     },
+    updateProject: (state, action) => {
+      const updatedProject = action.payload;
+      
+      // Update project in current workspace
+      if (state.currentWorkspace) {
+        state.currentWorkspace.projects = state.currentWorkspace.projects.map((p) =>
+          p.id === updatedProject.id ? updatedProject : p
+        );
+      }
+      
+      // Update project in workspaces array
+      state.workspaces = state.workspaces.map((w) =>
+        w.id === updatedProject.workspaceId || (state.currentWorkspace && w.id === state.currentWorkspace.id)
+          ? {
+              ...w,
+              projects: w.projects.map((p) =>
+                p.id === updatedProject.id ? updatedProject : p
+              ),
+            }
+          : w
+      );
+    },
     addTask: (state, action) => {
       state.currentWorkspace.projects = state.currentWorkspace.projects.map(
         (p) => {
@@ -99,31 +121,57 @@ const workspaceSlice = createSlice({
       );
     },
     updateTask: (state, action) => {
-      state.currentWorkspace.projects.map((p) => {
-        if (p.id === action.payload.projectId) {
-          p.tasks = p.tasks.map((t) =>
-            t.id === action.payload.id ? action.payload : t
-          );
-        }
-      });
-      // find workspace and project by id and update task in it
-      state.workspaces = state.workspaces.map((w) =>
-        w.id === state.currentWorkspace.id
-          ? {
-              ...w,
-              projects: w.projects.map((p) =>
-                p.id === action.payload.projectId
-                  ? {
-                      ...p,
-                      tasks: p.tasks.map((t) =>
-                        t.id === action.payload.id ? action.payload : t
-                      ),
-                    }
-                  : p
-              ),
+      const updatedTask = action.payload;
+      const projectId = updatedTask.projectId;
+      
+      if (!projectId) {
+        console.warn('updateTask: projectId is missing', updatedTask);
+        return;
+      }
+
+      // Helper function to update task in projects array
+      const updateTaskInProjects = (projects) => {
+        return projects.map((p) => {
+          if (p.id === projectId) {
+            // Find if task exists in this project
+            const taskIndex = p.tasks.findIndex((t) => t.id === updatedTask.id);
+            
+            if (taskIndex >= 0) {
+              // Task exists, update it
+              return {
+                ...p,
+                tasks: p.tasks.map((t) =>
+                  t.id === updatedTask.id ? updatedTask : t
+                ),
+              };
+            } else {
+              // Task doesn't exist, add it (shouldn't happen but handle gracefully)
+              return {
+                ...p,
+                tasks: [...(p.tasks || []), updatedTask],
+              };
             }
-          : w
-      );
+          }
+          return p;
+        });
+      };
+
+      // Update task in all workspaces
+      state.workspaces = state.workspaces.map((w) => ({
+        ...w,
+        projects: updateTaskInProjects(w.projects || []),
+      }));
+      
+      // Update task in current workspace (ensure new reference for React to detect change)
+      if (state.currentWorkspace) {
+        const updatedWorkspace = state.workspaces.find((w) => w.id === state.currentWorkspace.id);
+        if (updatedWorkspace) {
+          state.currentWorkspace = updatedWorkspace;
+        } else {
+          // Fallback: update projects directly if workspace not found in list
+          state.currentWorkspace.projects = updateTaskInProjects(state.currentWorkspace.projects || []);
+        }
+      }
     },
     deleteTask: (state, action) => {
       state.currentWorkspace.projects.map((p) => {
@@ -149,6 +197,12 @@ const workspaceSlice = createSlice({
           : w
       );
     },
+    clearWorkspaces: (state) => {
+      state.workspaces = [];
+      state.currentWorkspace = null;
+      state.loading = false;
+      localStorage.removeItem("currentWorkspaceId");
+    },
   },
   extraReducers: (builder) => {
     builder.addCase(fetchWorkspaces.pending, (state) => {
@@ -156,24 +210,37 @@ const workspaceSlice = createSlice({
     });
 
     builder.addCase(fetchWorkspaces.fulfilled, (state, action) => {
-      state.workspaces = action.payload;
-      if (action.payload.length > 0) {
-        const localStorageCurrentWorkspaceId =
-          localStorage.getItem("currentWorkspaceId");
-
-        if (localStorageCurrentWorkspaceId) {
-          const findWorkspace = action.payload.find(
-            (w) => w.id === localStorageCurrentWorkspaceId
+      // Preserve current workspace ID before updating
+      const currentWorkspaceId = state.currentWorkspace?.id || localStorage.getItem("currentWorkspaceId");
+      
+      // Update workspaces array
+      state.workspaces = action.payload || [];
+      
+      if (state.workspaces.length > 0) {
+        // Try to preserve the current workspace selection
+        if (currentWorkspaceId) {
+          const findWorkspace = state.workspaces.find(
+            (w) => w.id === currentWorkspaceId
           );
 
           if (findWorkspace) {
+            // Keep the existing workspace if it still exists in the list
             state.currentWorkspace = findWorkspace;
+            localStorage.setItem("currentWorkspaceId", currentWorkspaceId);
           } else {
-            state.currentWorkspace = action.payload[0];
+            // Current workspace no longer exists, set to first available
+            state.currentWorkspace = state.workspaces[0];
+            localStorage.setItem("currentWorkspaceId", state.workspaces[0].id);
           }
         } else {
-          state.currentWorkspace = action.payload[0];
+          // No current workspace, set to first available
+          state.currentWorkspace = state.workspaces[0];
+          localStorage.setItem("currentWorkspaceId", state.workspaces[0].id);
         }
+      } else {
+        // No workspaces available
+        state.currentWorkspace = null;
+        localStorage.removeItem("currentWorkspaceId");
       }
 
       state.loading = false;
@@ -192,8 +259,10 @@ export const {
   updateWorkspace,
   deleteWorkspace,
   addProject,
+  updateProject,
   addTask,
   updateTask,
   deleteTask,
+  clearWorkspaces,
 } = workspaceSlice.actions;
 export default workspaceSlice.reducer;

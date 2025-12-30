@@ -84,18 +84,67 @@ const ProjectTasks = ({ tasks }) => {
       toast.loading("Updating status...");
       const token = await getToken();
 
-      await api.put(
+      const { data } = await api.put(
         `/api/tasks/${taskId}`,
         { status: newStatus },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      let updatedTask = structuredClone(tasks.find((t) => t.id === taskId));
-      updatedTask.status = newStatus;
-      dispatch(updateTask(updatedTask));
+      // Use the updated task from backend response
+      if (data.task) {
+        // Find the original task to preserve any fields that might not be in response
+        const originalTask = tasks.find((t) => t.id === taskId);
+        
+        // Merge backend response with original task to ensure all fields are preserved
+        const updatedTask = {
+          ...originalTask, // Preserve original fields
+          ...data.task, // Override with updated fields from backend
+          projectId: data.task.projectId || originalTask?.projectId,
+          // Ensure assignee object is preserved if backend returns it
+          assignee: data.task.assignee || originalTask?.assignee,
+        };
+        
+        dispatch(updateTask(updatedTask));
+      }
 
       toast.dismissAll();
-      toast.success("Task status updated successfully");
+      toast.success(data.message || "Task status updated successfully");
+    } catch (error) {
+      toast.dismissAll();
+      toast.error(error?.response?.data?.message || error.message);
+    }
+  };
+
+  const handlePriorityChange = async (taskId, newPriority) => {
+    try {
+      toast.loading("Updating priority...");
+      const token = await getToken();
+
+      const { data } = await api.put(
+        `/api/tasks/${taskId}`,
+        { priority: newPriority },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Use the updated task from backend response
+      if (data.task) {
+        // Find the original task to preserve any fields that might not be in response
+        const originalTask = tasks.find((t) => t.id === taskId);
+        
+        // Merge backend response with original task to ensure all fields are preserved
+        const updatedTask = {
+          ...originalTask, // Preserve original fields
+          ...data.task, // Override with updated fields from backend
+          projectId: data.task.projectId || originalTask?.projectId,
+          // Ensure assignee object is preserved if backend returns it
+          assignee: data.task.assignee || originalTask?.assignee,
+        };
+        
+        dispatch(updateTask(updatedTask));
+      }
+
+      toast.dismissAll();
+      toast.success(data.message || "Task priority updated successfully");
     } catch (error) {
       toast.dismissAll();
       toast.error(error?.response?.data?.message || error.message);
@@ -275,12 +324,22 @@ const ProjectTasks = ({ tasks }) => {
                             </span>
                           </div>
                         </td>
-                        <td className="px-4 py-2">
-                          <span
-                            className={`text-xs px-2 py-1 rounded ${background} ${prioritycolor}`}
+                        <td
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-4 py-2"
+                        >
+                          <select
+                            name="priority"
+                            onChange={(e) =>
+                              handlePriorityChange(task.id, e.target.value)
+                            }
+                            value={task.priority}
+                            className={`group-hover:ring ring-zinc-100 outline-none px-2 pr-4 py-1 rounded text-xs font-semibold ${background} ${prioritycolor} cursor-pointer border-0`}
                           >
-                            {task.priority}
-                          </span>
+                            <option value="LOW">LOW</option>
+                            <option value="MEDIUM">MEDIUM</option>
+                            <option value="HIGH">HIGH</option>
+                          </select>
                         </td>
                         <td
                           onClick={(e) => e.stopPropagation()}
@@ -369,11 +428,21 @@ const ProjectTasks = ({ tasks }) => {
                     </div>
 
                     <div>
-                      <span
-                        className={`text-xs px-2 py-1 rounded ${background} ${prioritycolor}`}
+                      <label className="text-zinc-600 dark:text-zinc-400 text-xs mb-1 block">
+                        Priority
+                      </label>
+                      <select
+                        name="priority"
+                        onChange={(e) =>
+                          handlePriorityChange(task.id, e.target.value)
+                        }
+                        value={task.priority}
+                        className={`w-full mt-1 bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-300 dark:ring-zinc-700 outline-none px-2 py-1 rounded text-xs font-semibold ${background} ${prioritycolor}`}
                       >
-                        {task.priority}
-                      </span>
+                        <option value="LOW">LOW</option>
+                        <option value="MEDIUM">MEDIUM</option>
+                        <option value="HIGH">HIGH</option>
+                      </select>
                     </div>
 
                     <div>

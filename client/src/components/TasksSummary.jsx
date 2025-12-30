@@ -10,10 +10,13 @@ export default function TasksSummary() {
 
   // Get all tasks for all projects in current workspace
   useEffect(() => {
-    if (currentWorkspace) {
-      setTasks(currentWorkspace.projects.flatMap((project) => project.tasks));
+    if (currentWorkspace && currentWorkspace.projects) {
+      const allTasks = currentWorkspace.projects.flatMap((project) => project.tasks || []);
+      setTasks(allTasks);
+    } else {
+      setTasks([]);
     }
-  }, [currentWorkspace]);
+  }, [currentWorkspace, currentWorkspace?.projects]);
 
   const myTasks = tasks.filter((i) => i.assigneeId === user.id);
   const overdueTasks = tasks.filter(

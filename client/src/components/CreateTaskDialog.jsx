@@ -33,15 +33,34 @@ export default function CreateTaskDialog({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.due_date) {
+      toast.error("Due date is required");
+      return;
+    }
+    
+    if (!formData.title.trim()) {
+      toast.error("Task title is required");
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
+      // Convert due_date from YYYY-MM-DD to ISO 8601 format
+      const payload = {
+        ...formData,
+        workspaceId: currentWorkspace.id,
+        projectId,
+        // Convert date string (YYYY-MM-DD) to ISO 8601 format
+        due_date: formData.due_date
+          ? new Date(formData.due_date + 'T00:00:00.000Z').toISOString()
+          : undefined,
+      };
+      
       const { data } = await api.post(
         "/api/tasks",
-        {
-          ...formData,
-          workspaceId: currentWorkspace.id,
-          projectId,
-        },
+        payload,
         { headers: { Authorization: `Bearer ${await getToken()}` } }
       );
       setShowCreateTask(false);
@@ -184,6 +203,7 @@ export default function CreateTaskDialog({
                 }
                 min={new Date().toISOString().split("T")[0]}
                 className="w-full rounded dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-zinc-900 dark:text-zinc-200 text-sm mt-1"
+                required
               />
             </div>
             {formData.due_date && (

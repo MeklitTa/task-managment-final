@@ -1,0 +1,320 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { Inngest } from 'inngest';
+import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
+import { WorkspaceRole } from '../common/enums';
+
+@Injectable()
+export class InngestService {
+  private readonly logger = new Logger(InngestService.name);
+  public readonly client: Inngest;
+  private functions: any[] = [];
+
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {
+    this.client = new Inngest({ id: 'project-managment' });
+    this.registerFunctions();
+  }
+
+  private registerFunctions() {
+    // User sync functions
+    this.functions.push(
+      this.client.createFunction(
+        { id: 'sync-user-from-clerk' },
+        { event: 'clerk/user.created' },
+        async ({ event }) => {
+          const { data } = event;
+          await this.prisma.user.create({
+            data: {
+              id: data.id,
+              email: data?.email_addresses[0]?.email_address,
+              name: `${data?.first_name} ${data?.last_name}`,
+              image: data?.image_url,
+            },
+          });
+        },
+      ),
+    );
+
+    this.functions.push(
+      this.client.createFunction(
+        { id: 'delete-user-with-clerk' },
+        { event: 'clerk/user.deleted' },
+        async ({ event }) => {
+          const { data } = event;
+          await this.prisma.user.delete({
+            where: { id: data.id },
+          });
+        },
+      ),
+    );
+
+    this.functions.push(
+      this.client.createFunction(
+        { id: 'update-user-from-clerk' },
+        { event: 'clerk/user.updated' },
+        async ({ event }) => {
+          const { data } = event;
+          await this.prisma.user.update({
+            where: { id: data.id },
+            data: {
+              email: data?.email_addresses[0]?.email_address,
+              name: `${data?.first_name} ${data?.last_name}`,
+              image: data?.image_url,
+            },
+          });
+        },
+      ),
+    );
+
+    // Workspace sync functions
+    this.functions.push(
+      this.client.createFunction(
+        { id: 'sync-workspace-from-clerk' },
+        { event: 'clerk/organization.created' },
+        async ({ event }) => {
+          const { data } = event;
+          await this.prisma.workspace.create({
+            data: {
+              id: data.id,
+              name: data.name,
+              slug: data.slug,
+              ownerId: data.created_by,
+              image_url: data.image_url,
+            },
+          });
+
+          await this.prisma.workspaceMember.create({
+            data: { userId: data.created_by, workspaceId: data.id, role: 'ADMIN' },
+          });
+        },
+      ),
+    );
+
+    this.functions.push(
+      this.client.createFunction(
+        { id: 'update-workspace-from-clerk' },
+        { event: 'clerk/organization.updated' },
+        async ({ event }) => {
+          const { data } = event;
+          await this.prisma.workspace.update({
+            where: { id: data.id },
+            data: {
+              name: data.name,
+              slug: data.slug,
+              ownerId: data.created_by,
+              image_url: data.image_url,
+            },
+          });
+        },
+      ),
+    );
+
+    this.functions.push(
+      this.client.createFunction(
+        { id: 'delete-workspace-with-clerk' },
+        { event: 'clerk/organization.deleted' },
+        async ({ event }) => {
+          const { data } = event;
+          await this.prisma.workspace.delete({
+            where: { id: data.id },
+          });
+        },
+      ),
+    );
+
+    this.functions.push(
+      this.client.createFunction(
+        { id: 'sync-workspace-member-from-clerk' },
+        { event: 'clerk/organizationInvitation.accepted' },
+        async ({ event }) => {
+          const { data } = event;
+          await this.prisma.workspaceMember.create({
+            data: {
+              userId: data.user_id,
+              workspaceId: data.organization_id,
+              role: String(data.role_name).toUpperCase() as WorkspaceRole,
+            },
+          });
+        },
+      ),
+    );
+
+    // Task assignment email function
+    this.functions.push(
+      this.client.createFunction(
+        { id: 'send-task-assignment-mail' },
+        { event: 'app/task.assigned' },
+      async ({ event, step }) => {
+        const { taskId, origin } = event.data;
+
+        const task = await step.run('fetch-task', async () => {
+          const task = await this.prisma.task.findUnique({
+            where: { id: taskId },
+            include: { assignee: true, project: true },
+          });
+
+          if (!task) {
+            this.logger.error(`Task not found: ${taskId}`);
+            throw new Error(`Task with id ${taskId} not found`);
+          }
+
+          if (!task.assignee) {
+            this.logger.error(`Task ${taskId} has no assignee`);
+            throw new Error(`Task ${taskId} has no assignee`);
+          }
+
+          if (!task.assignee.email) {
+            this.logger.error(`Assignee ${task.assignee.id} has no email address`);
+            throw new Error(`Assignee ${task.assignee.id} has no email address`);
+          }
+
+          if (!task.project) {
+            this.logger.error(`Task ${taskId} has no project`);
+            throw new Error(`Task ${taskId} has no project`);
+          }
+
+          return task;
+        });
+
+        await step.run('send-task-assignment-email', async () => {
+          try {
+            await this.emailService.sendEmail({
+              to: task.assignee.email,
+              subject: `new task assignment in ${task.project.name}`,
+              body: `<div style="max-width:600px;">
+          <h2>Hi ${task.assignee.name}, 👋</h2> 
+
+  <p style="font-size:16px;">You have been assigned a new task:</p>
+
+  <p style="font-size:18px; font-weight:bold; color:#007bff; margin:8px 0;">
+    ${task.title}
+  </p>
+
+  <div style="border:1px solid #ddd; padding:12px 16px; border-radius:6px; margin-bottom:30px;">
+    <p style="margin:6px 0;">
+      <strong>Description:</strong> ${task.description || 'No description'}
+    </p>
+
+    <p style="margin:6px 0;">
+      <strong>Due date:</strong> ${new Date(task.due_date).toLocaleDateString()}
+    </p>
+  </div>
+
+  <a 
+    href="${origin}" 
+    style="background-color:#007bff; padding:12px 24px; border-radius:5px; color:#fff; font-weight:600; font-size:16px; text-decoration:none;">
+    View task
+  </a>
+
+  <p style="margin-top:20px; font-size:14px; color:#6c757d;">
+    Please make sure to review and complete it before the due date.
+  </p>
+</div>`,
+            });
+            this.logger.log(
+              `Successfully sent task assignment email for task ${taskId} to ${task.assignee.email}`,
+            );
+          } catch (error) {
+            this.logger.error(
+              `Failed to send task assignment email for task ${taskId}: ${error.message}`,
+            );
+            throw error;
+          }
+        });
+
+        if (
+          new Date(task.due_date).toLocaleDateString() !==
+          new Date().toLocaleDateString()
+        ) {
+          await step.sleepUntil('wait-for-the-due-date', new Date(task.due_date));
+
+          await step.run('check-if-task-is-completed', async () => {
+            const task = await this.prisma.task.findUnique({
+              where: { id: taskId },
+              include: { assignee: true, project: true },
+            });
+
+            if (!task) {
+              return;
+            }
+
+            if (task.status !== 'DONE') {
+              await step.run('send-task-reminder-mail', async () => {
+                try {
+                  if (!task.assignee?.email) {
+                    this.logger.error(
+                      `Cannot send reminder: assignee has no email for task ${taskId}`,
+                    );
+                    return;
+                  }
+
+                  await this.emailService.sendEmail({
+                    to: task.assignee.email,
+                    subject: `reminder for ${task.project.name}`,
+                    body: `
+<div style="max-width:600px;">
+  <h2>Hi ${task.assignee.name}, 👋</h2>
+
+  <p style="font-size:16px;">
+    You have a task due in ${task.project.name}:
+  </p>
+
+  <p style="font-size:18px; font-weight:bold; color:#007bff; margin:8px 0;">
+    ${task.title}
+  </p>
+
+  <div style="border:1px solid #ddd; padding:12px 16px; border-radius:6px; margin-bottom:30px;">
+    <p style="margin:6px 0;">
+      <strong>Description:</strong> ${task.description || 'No description'}
+    </p>
+
+    <p style="margin:6px 0;">
+      <strong>Due date:</strong> ${new Date(task.due_date).toLocaleDateString()}
+    </p>
+  </div>
+
+  <a
+    href="${origin}"
+    style="background-color:#007bff; padding:12px 24px; border-radius:5px; color:#fff; font-weight:600; font-size:16px; text-decoration:none;"
+  >
+    View task
+  </a>
+
+  <p style="margin-top:20px; font-size:14px; color:#6c757d;">
+    Please make sure to review and complete it before the due date.
+  </p>
+</div>
+`,
+                  });
+                  this.logger.log(
+                    `Successfully sent reminder email for task ${taskId} to ${task.assignee.email}`,
+                  );
+                } catch (error) {
+                  this.logger.error(
+                    `Failed to send reminder email for task ${taskId}: ${error.message}`,
+                  );
+                }
+              });
+            }
+          });
+        }
+      },
+      ),
+    );
+  }
+
+  public getFunctions() {
+    return this.functions;
+  }
+
+  async sendEvent(name: string, data: any) {
+    return this.client.send({
+      name,
+      data,
+    });
+  }
+}
+

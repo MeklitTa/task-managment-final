@@ -32,16 +32,40 @@ const CreateProjectDialog = ({ isDialogOpen, setIsDialogOpen }) => {
         return toast.error("please select a team lead");
       }
       setIsSubmitting(true);
+      
+      // Convert date strings to ISO 8601 format
+      const payload = {
+        workspaceId: currentWorkspace.id,
+        ...formData,
+        // Convert date strings (YYYY-MM-DD) to ISO 8601 format
+        start_date: formData.start_date 
+          ? new Date(formData.start_date + 'T00:00:00.000Z').toISOString()
+          : undefined,
+        end_date: formData.end_date
+          ? new Date(formData.end_date + 'T00:00:00.000Z').toISOString()
+          : undefined,
+      };
+      
       const { data } = await api.post(
         "/api/projects",
-        {
-          workspaceId: currentWorkspace.id,
-          ...formData,
-        },
+        payload,
         { headers: { Authorization: `Bearer ${await getToken()}` } }
       );
       dispatch(addProject(data.project));
       setIsDialogOpen(false);
+      
+      // Reset form
+      setFormData({
+        name: "",
+        description: "",
+        status: "PLANNING",
+        priority: "MEDIUM",
+        start_date: "",
+        end_date: "",
+        team_members: [],
+        team_lead: "",
+        progress: 0,
+      });
     } catch (error) {
       toast.error(error?.response?.data?.message || error.message);
     } finally {
