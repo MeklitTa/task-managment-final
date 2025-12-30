@@ -52,6 +52,10 @@ export default function CreateTaskDialog({
         ...formData,
         workspaceId: currentWorkspace.id,
         projectId,
+        // Remove assigneeId if it's empty string, so backend can default to team_lead
+        assigneeId: formData.assigneeId && formData.assigneeId.trim() !== "" 
+          ? formData.assigneeId 
+          : undefined,
         // Convert date string (YYYY-MM-DD) to ISO 8601 format
         due_date: formData.due_date
           ? new Date(formData.due_date + 'T00:00:00.000Z').toISOString()

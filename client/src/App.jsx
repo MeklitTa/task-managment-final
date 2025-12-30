@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./pages/Layout";
 import { Toaster } from "react-hot-toast";
 import Dashboard from "./pages/Dashboard";
@@ -51,6 +51,8 @@ const App = () => {
                     <Route path="projects" element={<Projects />} />
                     <Route path="projectsDetail" element={<ProjectDetails />} />
                     <Route path="taskDetails" element={<TaskDetails />} />
+                    {/* Catch-all route for 404 - redirect to dashboard */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
             </Routes>
         </>
