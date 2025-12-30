@@ -44,18 +44,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       console.error(errorMsg, error);
       throw new Error(errorMsg);
     }
-    
-    try {
-      // super() must be called at root level, not inside try-catch
-      super({
-        adapter,
-        log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-      });
-    } catch (error) {
-      const errorMsg = `Failed to initialize PrismaClient: ${error instanceof Error ? error.message : String(error)}`;
-      console.error(errorMsg, error);
-      throw new Error(errorMsg);
-    }
+
+    // Configure Prisma client options
+    const prismaOptions: any = {
+      adapter,
+      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    };
+
+    // super() must be a root-level statement
+    super(prismaOptions);
   }
 
   async onModuleInit() {

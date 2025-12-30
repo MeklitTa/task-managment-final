@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from '../src/app.module';
-import * as express from 'express';
-import serverless from 'serverless-http';
+import express from 'express';
 import { clerkMiddleware } from '@clerk/express';
 import { ValidationPipe } from '@nestjs/common';
 import { AllExceptionsFilter } from '../src/common/http-exception.filter';
+
+// Use require for serverless-http as it may not have TypeScript definitions
+const serverless = require('serverless-http');
 
 let cachedApp: express.Express;
 let serverlessHandler: any;
