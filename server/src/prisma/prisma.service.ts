@@ -10,15 +10,16 @@ try {
   const ws = require('ws');
   // Set the WebSocket constructor - this is required for Neon
   neonConfig.webSocketConstructor = ws;
-  
-  // Enable fetch-based querying as fallback (more reliable)
-  // This uses HTTP instead of WebSocket when possible
-  if (typeof neonConfig.poolQueryViaFetch !== 'undefined') {
-    neonConfig.poolQueryViaFetch = true;
-  }
 } catch (error) {
-  console.error('Failed to configure WebSocket for Neon:', error);
-  throw new Error('WebSocket package (ws) is required for Neon database connections');
+  // In serverless environments, WebSocket might not be available
+  // But Neon can use fetch-based connections which work in serverless
+  console.warn('WebSocket (ws) package not available, using fetch-based connections');
+}
+
+// Enable fetch-based querying as fallback (more reliable in serverless)
+// This uses HTTP instead of WebSocket when possible
+if (typeof neonConfig.poolQueryViaFetch !== 'undefined') {
+  neonConfig.poolQueryViaFetch = true;
 }
 
 @Injectable()
@@ -29,7 +30,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     const connectionString = process.env.DATABASE_URL;
     
     if (!connectionString) {
-      throw new Error('DATABASE_URL environment variable is not set');
+      const error = new Error('DATABASE_URL environment variable is not set');
+      console.error(error.message);
+      throw error;
     }
 
     // Create adapter before calling super()
@@ -37,14 +40,22 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       adapter = new PrismaNeon({ connectionString });
     } catch (error) {
-      console.error('Failed to create Prisma adapter:', error);
-      throw error;
+      const errorMsg = `Failed to create Prisma adapter: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(errorMsg, error);
+      throw new Error(errorMsg);
     }
     
-    // super() must be called at root level, not inside try-catch
-    super({
-      adapter,
-    });
+    try {
+      // super() must be called at root level, not inside try-catch
+      super({
+        adapter,
+        log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+      });
+    } catch (error) {
+      const errorMsg = `Failed to initialize PrismaClient: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(errorMsg, error);
+      throw new Error(errorMsg);
+    }
   }
 
   async onModuleInit() {
